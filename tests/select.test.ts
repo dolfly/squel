@@ -981,5 +981,188 @@ describe("SELECT builder", () => {
         })
       })
     })
+
+    describe("CTE (WITH) queries", () => {
+      it("select with CTE on default flavour", () => {
+        const sub = squel.select().from("users").where("active = ?", true)
+        const query = squel
+          .select()
+          .with("active_users", sub)
+          .from("active_users")
+        expect(query.toString()).toBe(
+          "WITH active_users AS (SELECT * FROM users WHERE (active = TRUE)) SELECT * FROM active_users",
+        )
+        expect(query.toParam()).toEqual({
+          text: "WITH active_users AS (SELECT * FROM users WHERE (active = ?)) SELECT * FROM active_users",
+          values: [true],
+        })
+      })
+
+      it("insert with CTE on default flavour", () => {
+        const sub = squel.select().from("users").where("active = ?", true)
+        const query = squel
+          .insert()
+          .with("active_users", sub)
+          .into("new_users")
+          .set("id", 1)
+        expect(query.toString()).toBe(
+          "WITH active_users AS (SELECT * FROM users WHERE (active = TRUE)) INSERT INTO new_users (id) VALUES (1)",
+        )
+      })
+
+      it("recursive CTE on default flavour", () => {
+        const sub = squel.select().from("employees")
+        const query = squel
+          .select()
+          .withRecursive("employee_tree", sub)
+          .from("employee_tree")
+        expect(query.toString()).toBe(
+          "WITH RECURSIVE employee_tree AS (SELECT * FROM employees) SELECT * FROM employee_tree",
+        )
+      })
+
+      it("recursive CTE on mssql flavour (no RECURSIVE keyword)", () => {
+        const mssqlSquel = squel.useFlavour("mssql")
+        const sub = mssqlSquel.select().from("employees")
+        const query = mssqlSquel
+          .select()
+          .withRecursive("employee_tree", sub)
+          .from("employee_tree")
+        expect(query.toString()).toBe(
+          "WITH employee_tree AS (SELECT * FROM employees) SELECT * FROM employee_tree",
+        )
+      })
+    })
+
+    describe("Window Functions (OVER clause)", () => {
+      it("basic OVER", () => {
+        const query = squel
+          .select()
+          .from("employees")
+          .field(squel.over("AVG(salary)"), "avg_sal")
+        expect(query.toString()).toBe(
+          'SELECT AVG(salary) OVER () AS "avg_sal" FROM employees',
+        )
+      })
+
+      it("OVER with partitionBy and orderBy", () => {
+        const query = squel
+          .select()
+          .from("employees")
+          .field(
+            squel
+              .over("AVG(salary)")
+              .partitionBy("department")
+              .orderBy("hire_date", false),
+            "avg_sal",
+          )
+        expect(query.toString()).toBe(
+          'SELECT AVG(salary) OVER (PARTITION BY department ORDER BY hire_date DESC) AS "avg_sal" FROM employees',
+        )
+      })
+
+      it("OVER with partitionBy, orderBy, and rowsBetween", () => {
+        const query = squel
+          .select()
+          .from("employees")
+          .field(
+            squel
+              .over("SUM(salary)")
+              .partitionBy("department", "team")
+              .orderBy("hire_date", true)
+              .rowsBetween("UNBOUNDED PRECEDING", "CURRENT ROW"),
+            "running_total",
+          )
+        expect(query.toString()).toBe(
+          'SELECT SUM(salary) OVER (PARTITION BY department, team ORDER BY hire_date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "running_total" FROM employees',
+        )
+      })
+
+      it("OVER with partitionBy, orderBy, and rangeBetween", () => {
+        const query = squel
+          .select()
+          .from("employees")
+          .field(
+            squel
+              .over("SUM(salary)")
+              .partitionBy("department")
+              .orderBy("hire_date", true)
+              .rangeBetween("UNBOUNDED PRECEDING"),
+            "running_total",
+          )
+        expect(query.toString()).toBe(
+          'SELECT SUM(salary) OVER (PARTITION BY department ORDER BY hire_date ASC RANGE BETWEEN UNBOUNDED PRECEDING) AS "running_total" FROM employees',
+        )
+      })
+
+      it("OVER with parameterized function expressions and toParam()", () => {
+        const query = squel
+          .select()
+          .from("employees")
+          .field(
+            squel
+              .over("SUM(salary) + ?", 100)
+              .partitionBy("department")
+              .orderBy("hire_date", true),
+            "total",
+          )
+        expect(query.toString()).toBe(
+          'SELECT SUM(salary) + 100 OVER (PARTITION BY department ORDER BY hire_date ASC) AS "total" FROM employees',
+        )
+        expect(query.toParam()).toEqual({
+          text: 'SELECT SUM(salary) + ? OVER (PARTITION BY department ORDER BY hire_date ASC) AS "total" FROM employees',
+          values: [100],
+        })
+      })
+    })
+
+    describe("JSON Query extraction (jsonExtract)", () => {
+      it("default / mysql flavour", () => {
+        const query = squel
+          .select()
+          .from("users")
+          .where(squel.jsonExtract("profile", "$.name") + " = ?", "John")
+        expect(query.toString()).toBe(
+          "SELECT * FROM users WHERE (json_extract(profile, '$.name') = 'John')",
+        )
+        expect(query.toParam()).toEqual({
+          text: "SELECT * FROM users WHERE (json_extract(profile, '$.name') = ?)",
+          values: ["John"],
+        })
+      })
+
+      it("postgres flavour (single key)", () => {
+        const pgSquel = squel.useFlavour("postgres")
+        const query = pgSquel
+          .select()
+          .from("users")
+          .where(pgSquel.jsonExtract("profile", "$.name") + " = ?", "John")
+        expect(query.toString()).toBe(
+          "SELECT * FROM users WHERE (profile->>'name' = 'John')",
+        )
+      })
+
+      it("postgres flavour (nested path)", () => {
+        const pgSquel = squel.useFlavour("postgres")
+        const query = pgSquel
+          .select()
+          .from("users")
+          .where(pgSquel.jsonExtract("profile", "$.user.name") + " = ?", "John")
+        expect(query.toString()).toBe(
+          "SELECT * FROM users WHERE (profile->'user'->>'name' = 'John')",
+        )
+      })
+
+      it("mssql flavour", () => {
+        const mssqlSquel = squel.useFlavour("mssql")
+        const query = mssqlSquel
+          .select()
+          .from("users")
+          .where(mssqlSquel.jsonExtract("profile", "$.name") + " = ?", "John")
+        expect(query.toString()).toBe(
+          "SELECT * FROM users WHERE (JSON_VALUE(profile, '$.name') = 'John')",
+        )
+      })
+    })
   })
 })

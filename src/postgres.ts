@@ -9,6 +9,13 @@ squel.flavours.postgres = (_squel: Squel) => {
   cls.DefaultQueryBuilderOptions.autoQuoteAliasNames = false
   cls.DefaultQueryBuilderOptions.useAsForTableAliasNames = true
 
+  class PostgresOnConflictUpdateHelper {
+    constructor(
+      public builder: any,
+      public block: any,
+    ) {}
+  }
+
   cls.PostgresOnConflictKeyUpdateBlock = class extends (
     cls.AbstractSetFieldBlock
   ) {
@@ -21,18 +28,53 @@ squel.flavours.postgres = (_squel: Squel) => {
       this._dupFields = []
     }
 
-    onConflict(conflictFields: any, fields: any): void {
+    onConflict(conflictFields: any, fields: any): any {
       this._onConflict = true
-      if (!conflictFields) return
-      if (!_isArray(conflictFields)) {
-        conflictFields = [conflictFields]
+      if (conflictFields) {
+        if (!_isArray(conflictFields)) {
+          conflictFields = [conflictFields]
+        }
+        this._dupFields = conflictFields.map(this._sanitizeField.bind(this))
       }
-      this._dupFields = conflictFields.map(this._sanitizeField.bind(this))
       if (fields) {
         Object.keys(fields).forEach((key) => {
           this._set(key, fields[key])
         })
       }
+      return this._queryBuilder
+    }
+
+    doUpdate(): any {
+      const helper = new PostgresOnConflictUpdateHelper(
+        this._queryBuilder,
+        this,
+      )
+      return new Proxy(helper, {
+        get(target, prop, receiver) {
+          if (prop === "set") {
+            return (field: any, value: any, options?: any) => {
+              target.block._set(field, value, options)
+              return receiver
+            }
+          }
+          const val = target.builder[prop]
+          if (typeof val === "function") {
+            return (...args: any[]) => {
+              const ret = val.apply(target.builder, args)
+              return ret === target.builder ? receiver : ret
+            }
+          }
+          return val
+        },
+      })
+    }
+
+    doNothing(): any {
+      this._onConflict = true
+      this._fields = []
+      this._values = [[]]
+      this._valueOptions = [[]]
+      return this._queryBuilder
     }
 
     _toParamString(options: any = {}): any {
@@ -70,77 +112,6 @@ squel.flavours.postgres = (_squel: Squel) => {
     }
   }
 
-  cls.ReturningBlock = class extends cls.Block {
-    _fields: any[]
-
-    constructor(options: any) {
-      super(options)
-      this._fields = []
-    }
-
-    returning(field: any, alias: any = null, options: any = {}): any {
-      alias = alias ? this._sanitizeFieldAlias(alias) : alias
-      field = this._sanitizeField(field)
-      const existingField = this._fields.filter(
-        (f: any) => f.name === field && f.alias === alias,
-      )
-      if (existingField.length) return this
-      this._fields.push({ name: field, alias, options })
-    }
-
-    _toParamString(options: any = {}): any {
-      const { buildParameterized } = options
-      let totalStr = ""
-      const totalValues: any[] = []
-      for (const field of this._fields) {
-        totalStr = _pad(totalStr, ", ")
-        const { name, alias, options: fieldOptions } = field
-        if (typeof name === "string") {
-          totalStr += this._formatFieldName(name, fieldOptions)
-        } else {
-          const ret = name._toParamString({ nested: true, buildParameterized })
-          totalStr += ret.text
-          ret.values.forEach((v: any) => totalValues.push(v))
-        }
-        if (alias) totalStr += ` AS ${this._formatFieldAlias(alias)}`
-      }
-      return {
-        text: totalStr.length > 0 ? `RETURNING ${totalStr}` : "",
-        values: totalValues,
-      }
-    }
-  }
-
-  cls.WithBlock = class extends cls.Block {
-    _tables: any[]
-
-    constructor(options: any) {
-      super(options)
-      this._tables = []
-    }
-
-    with(alias: any, table: any): void {
-      this._tables.push({ alias, table })
-    }
-
-    _toParamString(options: any = {}): any {
-      const parts: string[] = []
-      const values: any[] = []
-      for (const { alias, table } of this._tables) {
-        const ret = table._toParamString({
-          buildParameterized: options.buildParameterized,
-          nested: true,
-        })
-        parts.push(`${alias} AS ${ret.text}`)
-        ret.values.forEach((v: any) => values.push(v))
-      }
-      return {
-        text: parts.length ? `WITH ${parts.join(", ")}` : "",
-        values,
-      }
-    }
-  }
-
   cls.UsingBlock = class extends cls.AbstractTableBlock {
     constructor(options: any) {
       super({ ...options, prefix: "USING" })
@@ -150,7 +121,6 @@ squel.flavours.postgres = (_squel: Squel) => {
       this._table(table, alias)
     }
   }
-
   cls.DistinctOnBlock = class extends cls.Block {
     _useDistinct = false
     _distinctFields: any[]

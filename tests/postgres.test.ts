@@ -83,6 +83,46 @@ describe("Postgres flavour", () => {
       })
     })
 
+    describe('>> into(table).set(field, 1).onConflict("email").doUpdate().set("updated_at", date)', () => {
+      beforeEach(() => {
+        inst
+          .into("table")
+          .set("email", "john@example.com")
+          .onConflict("email")
+          .doUpdate()
+          .set("updated_at", "date")
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (email) VALUES ('john@example.com') ON CONFLICT (email) DO UPDATE SET updated_at = 'date'",
+        )
+      })
+
+      it("toParam", () => {
+        expect(inst.toParam()).toEqual({
+          text: "INSERT INTO table (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET updated_at = $2",
+          values: ["john@example.com", "date"],
+        })
+      })
+    })
+
+    describe('>> into(table).set(field, 1).onConflict("email").doNothing()', () => {
+      beforeEach(() => {
+        inst
+          .into("table")
+          .set("email", "john@example.com")
+          .onConflict("email")
+          .doNothing()
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (email) VALUES ('john@example.com') ON CONFLICT (email) DO NOTHING",
+        )
+      })
+    })
+
     describe('>> into(table).set(field, 1).returning("*")', () => {
       beforeEach(() => {
         inst.into("table").set("field", 1).returning("*")

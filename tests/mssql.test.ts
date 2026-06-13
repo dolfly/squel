@@ -147,6 +147,33 @@ describe("MSSQL flavour", () => {
         )
       })
     })
+
+    describe(">> into(table).set(field, 1).output(id, ident)", () => {
+      beforeEach(() => {
+        inst.into("table").output("id", "ident").set("field", 1)
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (field) OUTPUT INSERTED.id AS ident VALUES (1)",
+        )
+      })
+    })
+
+    describe(">> into(table).set(field, 1).outputs({ id: 'ident', name: 'naming' })", () => {
+      beforeEach(() => {
+        inst
+          .into("table")
+          .outputs({ id: "ident", name: "naming" })
+          .set("field", 1)
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (field) OUTPUT INSERTED.id AS ident, INSERTED.name AS naming VALUES (1)",
+        )
+      })
+    })
   })
 
   describe("UPDATE builder", () => {
@@ -247,6 +274,68 @@ describe("MSSQL flavour", () => {
     })
   })
 
+  describe("MERGE builder", () => {
+    let merge: any
+
+    beforeEach(() => {
+      merge = squel.merge()
+    })
+
+    describe(">> basic MERGE with UPDATE and INSERT using column references", () => {
+      beforeEach(() => {
+        merge
+          .into("target_table", "t")
+          .using("source_table", "s", "t.id = s.id")
+          .whenMatched()
+          .update({ "t.name": squel.str("s.name"), "t.val": 42 })
+          .whenNotMatched()
+          .insert({ name: squel.str("s.name"), val: 100 })
+      })
+
+      it("toString", () => {
+        expect(merge.toString()).toBe(
+          "MERGE INTO target_table AS t USING source_table AS s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.name = s.name, t.val = 42 WHEN NOT MATCHED THEN INSERT (name, val) VALUES (s.name, 100);",
+        )
+      })
+
+      it("toParam", () => {
+        const param = merge.toParam()
+        expect(param.text).toBe(
+          "MERGE INTO target_table AS t USING source_table AS s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.name = s.name, t.val = ? WHEN NOT MATCHED THEN INSERT (name, val) VALUES (s.name, ?);",
+        )
+        expect(param.values).toEqual([42, 100])
+      })
+    })
+
+    describe(">> MERGE with source query, delete action and matched conditions", () => {
+      beforeEach(() => {
+        const sourceQuery = squel
+          .select()
+          .from("source_table")
+          .where("active = ?", true)
+        merge
+          .into("target_table")
+          .using(sourceQuery, "s", "target_table.id = s.id")
+          .whenMatched("s.delete_flag = 1")
+          .delete()
+      })
+
+      it("toString", () => {
+        expect(merge.toString()).toBe(
+          "MERGE INTO target_table USING (SELECT * FROM source_table WHERE (active = TRUE)) AS s ON (target_table.id = s.id) WHEN MATCHED AND s.delete_flag = 1 THEN DELETE;",
+        )
+      })
+
+      it("toParam", () => {
+        const param = merge.toParam()
+        expect(param.text).toBe(
+          "MERGE INTO target_table USING (SELECT * FROM source_table WHERE (active = ?)) AS s ON (target_table.id = s.id) WHEN MATCHED AND s.delete_flag = 1 THEN DELETE;",
+        )
+        expect(param.values).toEqual([true])
+      })
+    })
+  })
+
   it("Default query builder options", () => {
     expect(squel.cls.DefaultQueryBuilderOptions).toEqual({
       autoQuoteTableNames: false,
@@ -266,6 +355,7 @@ describe("MSSQL flavour", () => {
       separator: " ",
       stringFormatter: null,
       rawNesting: false,
+      useRecursiveKeyword: false,
     })
   })
 })

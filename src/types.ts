@@ -89,10 +89,23 @@ export interface Case extends BaseBuilder {
   else(elseValue: unknown): this
 }
 
+export interface Over extends BaseBuilder {
+  partitionBy(...fields: any[]): this
+  orderBy(
+    field: unknown,
+    dir?: boolean | string | null,
+    ...values: unknown[]
+  ): this
+  rowsBetween(start: any, end?: any): this
+  rangeBetween(start: any, end?: any): this
+}
+
 export interface QueryBuilder extends BaseBuilder {
   blocks: unknown[]
   updateOptions(options: QueryBuilderOptions): void
   getBlock<T>(blockType: new (...args: any[]) => T): T | undefined
+  with(alias: string, table: QueryBuilder): this
+  withRecursive(alias: string, table: QueryBuilder): this
   [method: string]: unknown
 }
 
@@ -158,7 +171,6 @@ export interface Select extends QueryBuilder {
   union_all(table: Joinable): this
   for(str: string): this
   function(str: string, ...values: unknown[]): this
-  with?(alias: string, table: QueryBuilder): this
 }
 
 export interface Update extends QueryBuilder {
@@ -175,6 +187,13 @@ export interface Update extends QueryBuilder {
     ...values: unknown[]
   ): this
   limit(limit: number | null): this
+  returning(
+    field: any,
+    alias?: string | null,
+    options?: FormattingOptions,
+  ): this
+  output(field: any, alias?: string | null): this
+  outputs(outputs: { [field: string]: string | null }): this
 }
 
 export interface Insert extends QueryBuilder {
@@ -189,11 +208,50 @@ export interface Insert extends QueryBuilder {
     valueOptions?: FormattingOptions,
   ): this
   fromQuery(fields: string[], selectQuery: Select): this
+  returning(
+    field: any,
+    alias?: string | null,
+    options?: FormattingOptions,
+  ): this
+  output(field: any, alias?: string | null): this
+  outputs(outputs: { [field: string]: string | null }): this
+  onConflict?(conflictFields?: any, fields?: any): this
+  doUpdate?(): PostgresOnConflictUpdateHelper
+  doNothing?(): this
+  onDuplicateKeyUpdate?(): MysqlOnDuplicateKeyUpdateHelper
   onDupUpdate?(
     field: string,
     value?: unknown,
     options?: FormattingOptions,
   ): this
+}
+
+export interface PostgresOnConflictUpdateHelper extends Omit<Insert, "set"> {
+  set(field: string, value?: unknown, options?: FormattingOptions): this
+}
+
+export interface MysqlOnDuplicateKeyUpdateHelper extends Omit<Insert, "set"> {
+  set(field: string, value?: unknown, options?: FormattingOptions): this
+}
+
+export interface MergeMatchedClauseHelper {
+  update(fields: { [field: string]: unknown }): Merge
+  delete(): Merge
+}
+
+export interface MergeNotMatchedClauseHelper {
+  insert(fields: { [field: string]: unknown }): Merge
+}
+
+export interface Merge extends QueryBuilder {
+  into(table: string, alias?: string | null): this
+  using(
+    source: string | QueryBuilder,
+    alias?: string | null,
+    condition?: Conditional | null,
+  ): this
+  whenMatched(condition?: Conditional | null): MergeMatchedClauseHelper
+  whenNotMatched(condition?: Conditional | null): MergeNotMatchedClauseHelper
 }
 
 export interface Delete extends QueryBuilder {
@@ -207,6 +265,13 @@ export interface Delete extends QueryBuilder {
     ...values: unknown[]
   ): this
   limit(limit: number | null): this
+  returning(
+    field: any,
+    alias?: string | null,
+    options?: FormattingOptions,
+  ): this
+  output(field: any, alias?: string | null): this
+  outputs(outputs: { [field: string]: string | null }): this
 }
 
 export type FlavourRegistration = (squel: Squel) => void
@@ -229,6 +294,9 @@ export interface Squel {
   registerValueHandler(type: ValueType, handler: ValueHandler): void
   useFlavour(flavour?: Flavour | string | null): Squel
   replace?(options?: QueryBuilderOptions, blocks?: unknown[]): Insert
+  merge?(options?: QueryBuilderOptions, blocks?: unknown[]): Merge
+  over(funcExpr: any, ...funcParams: any[]): Over
+  jsonExtract(field: any, path: string): BaseBuilder
 }
 
 /**
@@ -249,6 +317,16 @@ export interface ClsRegistry {
     fieldName?: string | QueryBuilderOptions,
     options?: QueryBuilderOptions,
   ) => Case
+  Over: new (
+    funcExpr: any,
+    funcParams?: any[],
+    options?: QueryBuilderOptions,
+  ) => Over
+  JsonExtract: new (
+    field: any,
+    path: string,
+    options?: QueryBuilderOptions,
+  ) => BaseBuilder
   StringBlock: new (
     options: QueryBuilderOptions | undefined,
     str: string,
