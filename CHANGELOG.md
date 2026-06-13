@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [6.1.0](https://github.com/hiddentao/squel/compare/v6.0.7...v6.1.0) (2026-06-13)
+
+
+### Features
+
+* **postgres:** support for delete ... using ([#404](https://github.com/hiddentao/squel/issues/404)) ([312b6a0](https://github.com/hiddentao/squel/commit/312b6a02627f7bc8f58cb8439bece77898b3b9c0))
+
 ## [6.0.7](https://github.com/hiddentao/squel/compare/v6.0.6...v6.0.7) (2026-04-23)
 
 
