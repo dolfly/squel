@@ -602,6 +602,43 @@ describe("SELECT builder", () => {
     })
   })
 
+  describe("various join types", () => {
+    it("right_join", () => {
+      inst.from("table1").right_join("table2", "t2", "table1.id = t2.id")
+      expect(inst.toString()).toBe(
+        "SELECT * FROM table1 RIGHT JOIN table2 `t2` ON (table1.id = t2.id)",
+      )
+    })
+
+    it("outer_join", () => {
+      inst.from("table1").outer_join("table2", "t2", "table1.id = t2.id")
+      expect(inst.toString()).toBe(
+        "SELECT * FROM table1 OUTER JOIN table2 `t2` ON (table1.id = t2.id)",
+      )
+    })
+
+    it("left_outer_join", () => {
+      inst.from("table1").left_outer_join("table2", "t2", "table1.id = t2.id")
+      expect(inst.toString()).toBe(
+        "SELECT * FROM table1 LEFT OUTER JOIN table2 `t2` ON (table1.id = t2.id)",
+      )
+    })
+
+    it("full_join", () => {
+      inst.from("table1").full_join("table2", "t2", "table1.id = t2.id")
+      expect(inst.toString()).toBe(
+        "SELECT * FROM table1 FULL JOIN table2 `t2` ON (table1.id = t2.id)",
+      )
+    })
+
+    it("cross_join", () => {
+      inst.from("table1").cross_join("table2", "t2", "table1.id = t2.id")
+      expect(inst.toString()).toBe(
+        "SELECT * FROM table1 CROSS JOIN table2 `t2` ON (table1.id = t2.id)",
+      )
+    })
+  })
+
   describe("cloning", () => {
     it("basic", () => {
       const newinst = inst.from("students").limit(10).clone()

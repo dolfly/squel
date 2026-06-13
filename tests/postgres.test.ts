@@ -133,6 +133,30 @@ describe("Postgres flavour", () => {
       })
     })
 
+    describe('>> into(table).set(field, 1).onConflict("email").doUpdate().set("updated_at = EXCLUDED.updated_at")', () => {
+      beforeEach(() => {
+        inst
+          .into("table")
+          .set("email", "john@example.com")
+          .onConflict("email")
+          .doUpdate()
+          .set("updated_at = EXCLUDED.updated_at")
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (email) VALUES ('john@example.com') ON CONFLICT (email) DO UPDATE SET updated_at = EXCLUDED.updated_at",
+        )
+      })
+
+      it("toParam", () => {
+        expect(inst.toParam()).toEqual({
+          text: "INSERT INTO table (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET updated_at = EXCLUDED.updated_at",
+          values: ["john@example.com"],
+        })
+      })
+    })
+
     describe('>> into(table).set(field, 1).onConflict("email").doNothing()', () => {
       beforeEach(() => {
         inst
