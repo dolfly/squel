@@ -84,6 +84,26 @@ describe("MySQL flavour", () => {
           values: [1, 5],
         })
       })
+
+      it("toString chained directly on the proxy helper", () => {
+        const proxy = inst.onDuplicateKeyUpdate().set("field", 5)
+        expect(proxy.toString()).toBe(
+          "INSERT INTO table (field) VALUES (1) ON DUPLICATE KEY UPDATE field = 5",
+        )
+      })
+
+      it("toParam chained directly on the proxy helper", () => {
+        const proxy = inst.onDuplicateKeyUpdate().set("field", 5)
+        expect(proxy.toParam()).toEqual({
+          text: "INSERT INTO table (field) VALUES (?) ON DUPLICATE KEY UPDATE field = ?",
+          values: [1, 5],
+        })
+      })
+
+      it("custom attribute access on proxy helper", () => {
+        const proxy = inst.onDuplicateKeyUpdate()
+        expect(proxy.blocks).toBeDefined()
+      })
     })
 
     describe('>> into(table).set(field, 1).set(field1, 2).onDupUpdate(field, 5).onDupUpdate(field1, "str")', () => {

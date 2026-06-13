@@ -174,6 +174,18 @@ describe("MSSQL flavour", () => {
         )
       })
     })
+
+    describe(">> into(table).set(field, 1).output([id, name])", () => {
+      beforeEach(() => {
+        inst.into("table").output(["id", "name"]).set("field", 1)
+      })
+
+      it("toString", () => {
+        expect(inst.toString()).toBe(
+          "INSERT INTO table (field) OUTPUT INSERTED.id, INSERTED.name VALUES (1)",
+        )
+      })
+    })
   })
 
   describe("UPDATE builder", () => {
@@ -332,6 +344,31 @@ describe("MSSQL flavour", () => {
           "MERGE INTO target_table USING (SELECT * FROM source_table WHERE (active = ?)) AS s ON (target_table.id = s.id) WHEN MATCHED AND s.delete_flag = 1 THEN DELETE;",
         )
         expect(param.values).toEqual([true])
+      })
+    })
+
+    describe(">> MERGE with builder expression as condition", () => {
+      beforeEach(() => {
+        const cond = squel.expr().and("t.id = s.id").and("t.active = ?", 1)
+        merge
+          .into("target_table", "t")
+          .using("source_table", "s", cond)
+          .whenMatched()
+          .delete()
+      })
+
+      it("toString", () => {
+        expect(merge.toString()).toBe(
+          "MERGE INTO target_table AS t USING source_table AS s ON (t.id = s.id AND t.active = 1) WHEN MATCHED THEN DELETE;",
+        )
+      })
+
+      it("toParam", () => {
+        const param = merge.toParam()
+        expect(param.text).toBe(
+          "MERGE INTO target_table AS t USING source_table AS s ON (t.id = s.id AND t.active = ?) WHEN MATCHED THEN DELETE;",
+        )
+        expect(param.values).toEqual([1])
       })
     })
   })

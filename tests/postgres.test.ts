@@ -105,6 +105,32 @@ describe("Postgres flavour", () => {
           values: ["john@example.com", "date"],
         })
       })
+
+      it("toString chained directly on the proxy helper", () => {
+        const proxy = inst
+          .onConflict("email")
+          .doUpdate()
+          .set("updated_at", "date")
+        expect(proxy.toString()).toBe(
+          "INSERT INTO table (email) VALUES ('john@example.com') ON CONFLICT (email) DO UPDATE SET updated_at = 'date'",
+        )
+      })
+
+      it("toParam chained directly on the proxy helper", () => {
+        const proxy = inst
+          .onConflict("email")
+          .doUpdate()
+          .set("updated_at", "date")
+        expect(proxy.toParam()).toEqual({
+          text: "INSERT INTO table (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET updated_at = $2",
+          values: ["john@example.com", "date"],
+        })
+      })
+
+      it("custom attribute access on proxy helper", () => {
+        const proxy = inst.onConflict("email").doUpdate()
+        expect(proxy.blocks).toBeDefined()
+      })
     })
 
     describe('>> into(table).set(field, 1).onConflict("email").doNothing()', () => {
